@@ -3,6 +3,7 @@ import bcryptjs from 'bcryptjs'
 import { NextRequest } from 'next/server'
 import { prisma } from './prisma'
 import { otpService } from './otp'
+import { cookies } from 'next/headers'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret'
 
@@ -34,7 +35,28 @@ export async function comparePassword(password: string, hash: string): Promise<b
 
 export async function getUserFromRequest(request: NextRequest) {
   try {
-    const token = request.cookies.get('auth-token')?.value
+    const token = request.cookies.get('auth-token')?.value || 
+                  request.headers.get('authorization')?.replace('Bearer ', '')
+    if (!token) return null
+
+    const payload = verifyToken(token)
+    if (!payload) return null
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      include: { workerProfile: true }
+    })
+
+    return user
+  } catch {
+    return null
+  }
+}
+
+export async function getCurrentUser() {
+  try {
+    const cookieStore = cookies()
+    const token = cookieStore.get('auth-token')?.value
     if (!token) return null
 
     const payload = verifyToken(token)
